@@ -24,5 +24,11 @@
         }
       }
     }
+  },
+  "storage": {
+    "amplifyappimages": {
+      "service": "S3",
+      "providerPlugin": "awscloudformation"
+    }
   }
 }

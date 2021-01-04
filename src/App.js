@@ -1,26 +1,6 @@
-// import React from 'react';
-// import logo from './logo.svg';
-// import './App.css';
-// import { withAuthenticator, AmplifySignOut } from '@aws-amplify/ui-react'
-
-// function App() {
-//   return (
-//     <div className="App">
-//       <header>
-//         <img src={logo} className="App-logo" alt="logo" />
-//         <h1>We now have Auth!</h1>
-//       </header>
-//       <AmplifySignOut />
-//     </div>
-//   );
-// }
-
-// export default withAuthenticator(App);
-
-
 /* src/App.js */
 import React, { useEffect, useState } from 'react'
-import Amplify, { API, graphqlOperation } from 'aws-amplify'
+import Amplify, { API, graphqlOperation, Storage } from 'aws-amplify'
 import { createTodo, deleteTodo } from './graphql/mutations'
 import { listTodos } from './graphql/queries'
 import { withAuthenticator, AmplifySignOut } from '@aws-amplify/ui-react'
@@ -46,25 +26,44 @@ const App = () => {
     try {
       const todoData = await API.graphql(graphqlOperation(listTodos))
       const todos = todoData.data.listTodos.items
+      await Promise.all(todos.map(async todo => {
+        if (todo.image) {
+          const image = await Storage.get(todo.image);
+          todo.image = image;
+        }
+        return todo;
+      }))
       setTodos(todos)
     } catch (err) { console.log('error fetching todos') }
+  }
+
+  async function onChange(e) {
+    if (!e.target.files[0]) return
+    const file = e.target.files[0];
+    setFormState({ ...formState, image: file.name });
+    await Storage.put(file.name, file);
+    fetchTodos();
   }
 
   async function addTodo() {
     try {
       if (!formState.name || !formState.description) return
       const todo = { ...formState }
+      if (formState.image) {
+        const image = await Storage.get(formState.image);
+        formState.image = image;
+      }
+      await API.graphql(graphqlOperation(createTodo, {input: todo}))
       setTodos([...todos, todo])
       setFormState(initialState)
-      await API.graphql(graphqlOperation(createTodo, {input: todo}))
     } catch (err) {
       console.log('error creating todo:', err)
     }
   }
 
   async function removeTodo({ id }) {
-    const newNotesArray = todos.filter(todo => todo.id !== id);
-    setTodos(newNotesArray);
+    const newTodoArray = todos.filter(todo => todo.id !== id);
+    setTodos(newTodoArray);
     await API.graphql({ query: deleteTodo, variables: { input: { id } }});
   }
 
@@ -83,6 +82,10 @@ const App = () => {
         value={formState.description}
         placeholder="Description"
       />
+      <input
+        type="file"
+        onChange={onChange}
+      />
       <button style={styles.button} onClick={addTodo}>Create Todo</button>
       {
         todos.map((todo, index) => (
@@ -90,6 +93,10 @@ const App = () => {
             <p style={styles.todoName}>{todo.name}</p>
             <p style={styles.todoDescription}>{todo.description}</p>
             <button onClick={() => removeTodo(todo)}>Delete</button>
+
+            {
+              todo.image && <img alt={todo.name} src={todo.image} style={{width: 400}} />
+            }
           </div>
         ))
       }
